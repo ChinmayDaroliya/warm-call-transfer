@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS:List[str] = []
 
     # Database configuration
+    DATABASE_URL: str = ""
+    DATABASE_ECHO:bool 
 
     # LiveKit configuration
     LIVEKIT_API_KIT:str = ""

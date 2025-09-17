@@ -32,3 +32,16 @@ class AgentAvailabilityResponse(BaseModel):
     active_calls: int
     max_calls: int
     availability_capacity: int 
+
+class TransferStatusResponse(BaseModel):
+    transfer_id: str
+    status: str
+    call_id: str
+    from_agent_id: str
+    to_agent_id: str
+    initiated_at: datetime
+    completed_at: Optional[datetime]
+    duration_seconds: int
+    transfer_room_id: Optional[str]
+    summary: Optional[str]
+    reason: Optional[str]

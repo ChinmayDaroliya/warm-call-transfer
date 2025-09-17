@@ -7,13 +7,14 @@ from sqlalchemy import func
 from enum import Enum
 import uuid
 
-from app.config import Settings
+from app.config import settings
 
 # create database engine
 engine = create_engine(
-    Settings.DATABASE_URL,
-    echo = Settings.DATABASE_ECHO,
-    connect_args={"check_the same_thread":False} if "sqlite" in Settings.DATABASE_URL else {}    
+    settings.DATABASE_URL,
+    echo = settings.DATABASE_ECHO,
+    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+  
 )
 
 # create a session factory
@@ -60,7 +61,7 @@ class Agent(Base):
     calls_as_agent_a = relationship("Call", foreign_keys="Call.agent_a_id", back_populates="agent_a")
     calls_as_agent_b = relationship("Call", foreign_keys="Call.agent_b_id", back_populates="agent_b")
     transfers_initiated = relationship("Transfer", foreign_keys="Transfer.from_agent_id", back_populates="from_agent")
-    transfers_recieved = relationship("Transfer", foreign_keys="Transfer.to_agent_id", back_populates="to_agent")
+    transfers_received = relationship("Transfer", foreign_keys="Transfer.to_agent_id", back_populates="to_agent")
 
 class Call(Base):
     __tablename__ = "calls"
@@ -88,7 +89,7 @@ class Call(Base):
     # additional metadata
     call_reason = Column(String(255), nullable=True)
     priority = Column(String(20), default="normal")
-    metadata = Column(JSON, default=dict)   
+    extra_metadata = Column(JSON, default=dict)   
 
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -119,10 +120,10 @@ class Transfer(Base):
     duration_seconds = Column(Integer, default=0)
 
     # Room information
-    Transfer_room_id = Column(String(255), nullable=True) #Room where agents meet
+    transfer_room_id = Column(String(255), nullable=True) #Room where agents meet
 
     # Metadata
-    metadata = Column(JSON, default=dict)
+    extra_metadata = Column(JSON, default=dict)
 
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -155,7 +156,7 @@ class Room(Base):
     closed_at = Column(DateTime, nullable=True)
 
     # metadata
-    metadata = Column(JSON, default=dict)
+    extra_metadata = Column(JSON, default=dict)
 
 # database init function
 async def init_db():

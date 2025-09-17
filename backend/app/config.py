@@ -3,19 +3,22 @@ from typing import List
 
 class Settings(BaseSettings):
     #server configuration
-    HOST: str = "127.0.0.1",
-    PORT: int = 8000,
+    HOST: str = "127.0.0.1"
+    PORT: int = 8000
     DEBUG: bool = True
 
     #CORS Configurations
-    ALLOWED_ORIGINS:List[str] = []
+    ALLOWED_ORIGINS:List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
     # Database configuration
     DATABASE_URL: str = ""
-    DATABASE_ECHO:bool 
+    DATABASE_ECHO:bool = True
 
     # LiveKit configuration
-    LIVEKIT_API_KIT:str = ""
+    LIVEKIT_API_KEY:str = ""
     LIVEKIT_API_SECRET:str = ""
     LIVEKIT_WS_URL: str = ""
 
@@ -43,24 +46,24 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 # Create settings instance
-Settings = Settings()    
+settings = Settings()    
 
 # validate required settings
 # Ensure all critical environment variables and API keys are set before the app starts.
 def validate_settings():
     required_settings = [
-        ("LIVEKIT_API_KEY", Settings.LIVEKIT_API_KEY),
-        ("LIVEKIT_API_SECRET", Settings.LIVEKIT_API_SECRET),
-        ("LIVEKIT_WS_URL", Settings.LIVEKIT_WS_URL),
+          ("LIVEKIT_API_KEY", settings.LIVEKIT_API_KEY),
+          ("LIVEKIT_API_SECRET", settings.LIVEKIT_API_SECRET),
+          ("LIVEKIT_WS_URL", settings.LIVEKIT_WS_URL),
     ]
     
     # Check LLM provider keys
     llm_keys = {
-        "openai": Settings.OPENAI_API_KEY
+        "openai": settings.OPENAI_API_KEY
     }
 
-    if not llm_keys.get(Settings.DEFAULT_LLM_PROVIDER):
-        raise ValueError(f"API key for {Settings.DEFAULT_LLM_PROVIDER} is required")
+    if not llm_keys.get(settings.DEFAULT_LLM_PROVIDER):
+        raise ValueError(f"API key for {settings.DEFAULT_LLM_PROVIDER} is required")
     
     missing_settings = [name for name, value in required_settings if not value]
 
@@ -72,5 +75,5 @@ try:
     validate_settings()
 except ValueError as e:
     print(f"Configuration warning: {e}")
-    if not Settings.DEBUG:
+    if not settings.DEBUG:
         raise

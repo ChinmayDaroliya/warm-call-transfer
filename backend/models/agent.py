@@ -51,3 +51,6 @@ class AgentListResponse(BaseModel):
 
     class config:
         from_attributes: True
+
+class AgentStatusUpdate(BaseModel):
+    status: AgentStatus = Field(..., description="New agent status")

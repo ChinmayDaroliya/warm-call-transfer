@@ -9,7 +9,7 @@ from services.livekit_service import livekit_service
 from datetime import datetime
 from services.llm_service import llm_service
 import asyncio
-from app.config import Settings
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class TransferService:
 
         try:
             # get call and agents from database
-            call = db.query(Call).fliter(Call.id == call_id).first()
+            call = db.query(Call).filter(Call.id == call_id).first()
             from_agent = db.query(Agent).filter(Agent.id == from_agent_id).first()
             to_agent = db.query(Agent).filter(Agent.id == to_agent_id).first()
 
@@ -258,7 +258,7 @@ class TransferService:
             db.commit()
 
             # clean up transfer room
-            if transfer.Transfer_room_id:
+            if transfer.transfer_room_id:
                 await livekit_service.close_room(transfer.transfer_room_id)
 
             # clean up tracking
@@ -377,7 +377,7 @@ class TransferService:
         """Set timeout for transfer completion"""
 
         async def timeout_handler():
-            await asyncio.sleep(Settings.MAX_TRANSFER_WAIT_TIME)
+            await asyncio.sleep(settings.MAX_TRANSFER_WAIT_TIME)
 
             if transfer_id in self.active_transfers:
                 logger.warning(f"Transfer {transfer_id} timed out")

@@ -1,4 +1,3 @@
-# app/routers/rooms.py
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 import logging

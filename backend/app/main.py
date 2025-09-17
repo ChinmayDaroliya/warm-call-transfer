@@ -2,7 +2,11 @@ from fastapi import FastAPI
 import logging
 from contextlib import asynccontextmanager
 import uvicorn
-from app.config import Settings
+from app.config import settings
+from app.database import init_db
+from fastapi.middleware.cors import CORSMiddleware
+from routers import calls,agents,transfer,rooms
+from fastapi.responses import JSONResponse
 
 
 #configure logging
@@ -16,6 +20,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app:FastAPI):
     #startup
     logger.info("Starting up...")
+    await init_db()
+    logger.info("Database initialized")
     yield
     #shutdown
     logger.info("Shutting down...") 
@@ -29,6 +35,21 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(calls.router, prefix="/routers/calls", tags=["calls"])
+app.include_router(agents.router, prefix="/routers/agents", tags=["agents"])
+app.include_router(transfer.router, prefix="/routers/transfer", tags=["transfer"])
+app.include_router(rooms.router, prefix="/routers/rooms", tags=["rooms"])
+
 @app.get("/")
 async def root():
     return {"message" : "Backend is working from app/main.py"}
@@ -37,13 +58,20 @@ async def root():
 async def health_check():
     return {"status":"healthy" , "message":"service is running"}
 
-
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Global exception: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
 
 # Start FastAPI server with Uvicorn; auto-reloads on code changes
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host = Settings.HOST,
-        port = Settings.PORT,
-        reload = Settings.DEBUG 
+        host = settings.HOST,
+        port = settings.PORT,
+        reload = settings.DEBUG,
+        log_level="info"
     )

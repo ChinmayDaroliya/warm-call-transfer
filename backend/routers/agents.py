@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
 
-from app.database import get_db, Agent, AgentStatus, create_agent
+from app.database import get_db, Agent, AgentStatus,create_agent as db_create_agent
 from models.agent import (
     AgentCreateRequest, AgentResponse, AgentUpdateRequest,
     AgentListResponse, AgentStatusUpdate
@@ -27,14 +27,14 @@ async def create_agent(
         if existing_agent:
             raise HTTPException(status_code=400, detail="Agent with this email already exists")
         
-        agent = create_agent(
+        agent = db_create_agent(
             db=db,
             name=request.name,
             email=request.email,
             skills=request.skills
         )
         
-        return AgentResponse.from_orm(agent)
+        return AgentResponse.model_validate(agent)
         
     except HTTPException:
         raise

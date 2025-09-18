@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock, MagicMock
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.main import app
 from app.database import CallStatus,get_db
@@ -40,8 +40,8 @@ async def test_create_new_call_success(override_get_db):
             status=CallStatus.ACTIVE.value,
             agent_a_id=None,
             agent_b_id=None,         # ✅ must exist
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             started_at=None,
             ended_at=None,
             duration_seconds=None,

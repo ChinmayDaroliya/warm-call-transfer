@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import BaseModel,Field,EmailStr
+from pydantic import BaseModel,Field,EmailStr,ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -19,7 +19,7 @@ class AgentCreateRequest(BaseModel):
 class AgentUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, description="Agent's full name")
     skills: Optional[List[str]] = Field(None, description="List of agent skills")
-    max_concurrentcalls: Optional[int] = Field(None, description="maximum concurrent calls agent can handle")
+    max_concurrent_calls: Optional[int] = Field(None, description="maximum concurrent calls agent can handle")
 
 # Request model for updating the current status of an agent (available, busy, offline)
 class StatusUpdate(BaseModel):
@@ -31,14 +31,17 @@ class AgentResponse(BaseModel):
     name: str
     email: str
     status: AgentStatus
-    current_room_id: Optional[str]
+    current_room_id: str | None = None
     max_concurrent_calls: int
-    skills: List[str]
+    skills: list[str]
     created_at: datetime
     updated_at: datetime
 
-    class config:
-        from_attributes: True
+    model_config = {
+        "from_attributes": True  # This allows model_validate to read from ORM objects
+    }
+    # class config:
+    #     from_attributes: True
 
 # Response model providing a list of agents with basic info to the frontend
 class AgentListResponse(BaseModel):
@@ -48,9 +51,12 @@ class AgentListResponse(BaseModel):
     status: AgentStatus
     current_room_id: Optional[str]
     skills: List[str]
-
-    class config:
-        from_attributes: True
+    
+    model_config = {
+        "from_attributes": True
+    }
+    # class config:
+    #     from_attributes: True
 
 class AgentStatusUpdate(BaseModel):
     status: AgentStatus = Field(..., description="New agent status")

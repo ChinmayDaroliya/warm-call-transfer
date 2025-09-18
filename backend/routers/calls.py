@@ -7,7 +7,7 @@ from datetime import datetime
 from models.call import (
     CallCreateRequest, CallResponse,JoinCallResponse,JoinCallRequest, CallUpdateRequest, callListResponse
 )
-from app.database import (
+from app.database import (  
     get_db, Agent, AgentStatus, create_call, Call, CallStatus
 )
 from services.livekit_service import livekit_service
@@ -49,36 +49,45 @@ async def create_new_call(
                 available_agent.status = AgentStatus.BUSY.value
                 available_agent.current_room_id = room_id
 
-            # create call record in database
-            call = create_call(
-                db=db,
-                room_id = room_id,
-                caller_name=request.caller_name,
-                caller_phone=request.caller_phone,
-                agent_a_id=agent_id,
-                call_reason=request.call_reason,
-                priority=request.priority
-            )
+        # create call record in database
+        call = create_call(
+            db=db,
+            room_id = room_id,
+            caller_name=request.caller_name,
+            caller_phone=request.caller_phone,
+            agent_a_id=agent_id,
+            call_reason=request.call_reason,
+            priority=request.priority
+        )
 
-            # generate accesss token for caller
-            caller_token = livekit_service.generate_access_token(
-                room_name=room_id,
-                participant_identity=f"caller_{call.id}",
-                participant_name=request.caller_name or "Customer"
-            )
+        # generate accesss token for caller
+        caller_token = livekit_service.generate_access_token(
+            room_name=room_id,
+            participant_identity=f"caller_{call.id}",
+            participant_name=request.caller_name or "Customer"
+        )
 
-            db.commit()
+        db.commit()
 
-            return CallResponse(
-                id=call.id,
+        return CallResponse(
+             id=call.id,
                 room_id=room_id,
                 caller_name=request.caller_name,
                 caller_phone=request.caller_phone,
                 status=call.status,
                 agent_a_id=agent_id,
+                agent_b_id=getattr(call, "agent_b_id", None),  # ✅ add this
                 access_token=caller_token,
-                created_at=call.created_at
-            )
+                created_at=call.created_at,
+                updated_at=getattr(call, "updated_at", None),
+                started_at=getattr(call, "started_at", None),
+                ended_at=getattr(call, "ended_at", None),
+                duration_seconds=getattr(call, "duration_seconds", None),
+                transcript=getattr(call, "transcript", None),
+                summary=getattr(call, "summary", None),
+                summary_generated_at=getattr(call, "summary_generated_at", None),
+                extra_metadata=getattr(call, "extra_metadata", None),
+        )
 
     except Exception as e:
         logger.error(f"Error creating call: {str(e)}")

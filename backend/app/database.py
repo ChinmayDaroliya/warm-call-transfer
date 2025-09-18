@@ -166,7 +166,7 @@ async def init_db():
 # dependency function to get a session 
 def get_db():
     """Yields a database session"""
-    db = SessionLocal
+    db = SessionLocal()
     try:
         yield db
     finally:

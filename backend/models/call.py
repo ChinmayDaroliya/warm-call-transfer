@@ -43,8 +43,8 @@ class CallResponse(BaseModel):
     caller_name: Optional[str]
     caller_phone: Optional[str]
     status: CallStatus
-    agent_a_id: Optional[str]
-    agent_b_id: Optional[str]
+    agent_a_id: Optional[str] 
+    agent_b_id: Optional[str] 
     access_token: Optional[str] = None
     created_at:datetime
 

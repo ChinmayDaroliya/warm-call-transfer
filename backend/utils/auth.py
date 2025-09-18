@@ -1,7 +1,7 @@
 import jwt
 from datetime import datetime, timedelta
 from typing import Optional
-
+from jwt.exceptions import ExpiredSignatureError, InvalidSignatureError, DecodeError
 from app.config import settings
 
 
@@ -45,7 +45,6 @@ def create_access_token(
 
 def verify_access_token(token: str) -> Optional[dict]:
     """Verify a JWT access token"""
-    
     try:
         payload = jwt.decode(
             token,
@@ -53,5 +52,9 @@ def verify_access_token(token: str) -> Optional[dict]:
             algorithms=[settings.JWT_ALGORITHM]
         )
         return payload
-    except jwt.JWTError:
+    except ExpiredSignatureError:
+        print("Token expired")
+        return None
+    except (InvalidSignatureError, DecodeError):
+        print("Invalid token")
         return None

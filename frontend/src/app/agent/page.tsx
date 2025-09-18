@@ -3,7 +3,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AgentDashboard } from '../../components/agent/AgentDashboard';
+import { AgentDashboard } from '@/components/agent/AgentDashboard';
 import { useAgentStore } from '@/store';
 import { agentsApi } from '@/lib/api';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';

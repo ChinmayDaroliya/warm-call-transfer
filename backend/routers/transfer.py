@@ -31,11 +31,15 @@ async def initiate_transfer(
             db=db
         )
         
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["error"])
+        # Handle service error responses
+        if not result.get("success", True):  # Default to True if key doesn't exist
+            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
         
-        return TransferResponse(**result)
-        
+        return result  # Return the service response directly
+    
+    except HTTPException:
+    # Already handled above, re-raise
+        raise    
     except Exception as e:
         logger.error(f"Error initiating transfer: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -52,11 +56,14 @@ async def complete_transfer(
     try:
         result = await transfer_service.complete_warm_transfer(transfer_id, db)
         
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["error"])
+        # Handle service error responses
+        if not result.get("success", True):
+            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
         
         return {"message": "Transfer completed successfully", **result}
-        
+    except HTTPException:
+    # Already handled above, re-raise
+        raise        
     except Exception as e:
         logger.error(f"Error completing transfer: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -74,14 +81,19 @@ async def cancel_transfer(
     try:
         result = await transfer_service.cancel_transfer(transfer_id, reason, db)
         
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["error"])
+        # Handle service error responses
+        if not result.get("success", True):
+            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
         
         return {"message": "Transfer cancelled successfully"}
-        
+    
+    except HTTPException:
+    # Already handled above, re-raise
+        raise        
     except Exception as e:
         logger.error(f"Error cancelling transfer: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # Retrieve the current status of a specific transfer by its ID.
     
@@ -95,15 +107,18 @@ async def get_transfer_status(
     try:
         status = await transfer_service.get_transfer_status(transfer_id, db)
         
+        # Handle service error responses
         if "error" in status:
             raise HTTPException(status_code=404, detail=status["error"])
         
-        return TransferStatusResponse(**status)
-        
+        return status
+    
+    except HTTPException:
+    # Already handled above, re-raise
+        raise        
     except Exception as e:
         logger.error(f"Error getting transfer status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 # List all agents who are available for new transfers along with their current load.
 
 @router.get("/agents/available", response_model=List[AgentAvailabilityResponse])
@@ -115,7 +130,10 @@ async def get_available_agents(
     try:
         agents = await transfer_service.get_agent_availability(db)
         return agents
-        
+   
+    except HTTPException:
+    # Already handled above, re-raise
+        raise        
     except Exception as e:
         logger.error(f"Error getting available agents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -129,7 +147,10 @@ async def get_active_transfers():
     try:
         transfers = transfer_service.get_active_transfers()
         return {"active_transfers": transfers}
-        
+   
+    except HTTPException:
+    # Already handled above, re-raise
+        raise        
     except Exception as e:
         logger.error(f"Error getting active transfers: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,0 +1,176 @@
+// frontend/src/components/call/CallInterface.tsx
+import React, { useEffect, useRef } from 'react';
+import { useLiveKit } from '@/hooks/useLiveKit';
+import { useCall } from '@/hooks/useCall';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Mic, MicOff, Video, VideoOff, ScreenShare, PhoneOff, Users } from 'lucide-react';
+
+interface CallInterfaceProps {
+  token: string;
+  roomName: string;
+  onDisconnect: () => void;
+}
+
+export const CallInterface: React.FC<CallInterfaceProps> = ({
+  token,
+  roomName,
+  onDisconnect,
+}) => {
+  const {
+    room,
+    participants,
+    isConnected,
+    isAudioEnabled,
+    isVideoEnabled,
+    isScreenSharing,
+    connect,
+    disconnect,
+    toggleAudio,
+    toggleVideo,
+    shareScreen,
+    stopScreenShare,
+  } = useLiveKit();
+
+  const { currentCall } = useCall();
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (token && roomName) {
+      connect(token, roomName);
+    }
+
+    return () => {
+      disconnect();
+    };
+  }, [token, roomName, connect, disconnect]);
+
+  useEffect(() => {
+    if (room && localVideoRef.current) {
+      room.localParticipant.videoTrackPublications.forEach((publication) => {
+        if (publication.track) {
+          publication.track.attach(localVideoRef.current!);
+        }
+      });
+    }
+  }, [room, isVideoEnabled]);
+
+  useEffect(() => {
+    if (room && remoteVideoRef.current && participants.length > 0) {
+      const remoteParticipant = participants.find(p => p.identity !== room.localParticipant.identity);
+      if (remoteParticipant) {
+        remoteParticipant.videoTrackPublications.forEach((publication) => {
+          if (publication.track) {
+            publication.track.attach(remoteVideoRef.current!);
+          }
+        });
+      }
+    }
+  }, [room, participants]);
+
+  const handleDisconnect = () => {
+    disconnect();
+    onDisconnect();
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-gray-100 p-4">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        {/* Local Video */}
+        <Card>
+          <CardContent className="p-4 h-full">
+            <div className="flex flex-col h-full">
+              <h3 className="text-lg font-semibold mb-2">You</h3>
+              <div className="flex-1 bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={localVideoRef}
+                  className="w-full h-full object-cover"
+                  muted
+                  autoPlay
+                  playsInline
+                />
+                {!isVideoEnabled && (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                    <div className="text-white text-2xl">
+                      {currentCall?.caller_name?.charAt(0) || 'U'}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {currentCall?.caller_name || 'You'}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Remote Video */}
+        <Card>
+          <CardContent className="p-4 h-full">
+            <div className="flex flex-col h-full">
+              <h3 className="text-lg font-semibold mb-2">Participant</h3>
+              <div className="flex-1 bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={remoteVideoRef}
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  playsInline
+                />
+                {participants.length === 0 && (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                    <div className="text-white">Waiting for participant...</div>
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {participants.find(p => p.identity !== room?.localParticipant.identity)?.name || 'Unknown'}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Controls */}
+      <div className="flex justify-center space-x-4">
+        <Button
+          variant={isAudioEnabled ? 'default' : 'destructive'}
+          size="icon"
+          onClick={toggleAudio}
+        >
+          {isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+        </Button>
+
+        <Button
+          variant={isVideoEnabled ? 'default' : 'destructive'}
+          size="icon"
+          onClick={toggleVideo}
+        >
+          {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+        </Button>
+
+        <Button
+          variant={isScreenSharing ? 'default' : 'outline'}
+          size="icon"
+          onClick={isScreenSharing ? stopScreenShare : shareScreen}
+        >
+          <ScreenShare size={20} />
+        </Button>
+
+        <Button variant="outline" size="icon">
+          <Users size={20} />
+          <span className="ml-2">{participants.length + 1}</span>
+        </Button>
+
+        <Button variant="destructive" size="icon" onClick={handleDisconnect}>
+          <PhoneOff size={20} />
+        </Button>
+      </div>
+
+      {/* Status */}
+      <div className="mt-4 text-center text-sm text-muted-foreground">
+        {isConnected ? 'Connected' : 'Connecting...'} | Room: {roomName}
+      </div>
+    </div>
+  );
+};

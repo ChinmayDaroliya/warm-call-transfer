@@ -48,7 +48,7 @@ app.add_middleware(
 app.include_router(calls.router, prefix="/routers/calls", tags=["calls"])
 app.include_router(agents.router, prefix="/routers/agents", tags=["agents"])
 app.include_router(transfer.router, prefix="/routers/transfer", tags=["transfer"])
-app.include_router(rooms.router, prefix="/routers/rooms", tags=["rooms"])
+app.include_router(rooms.router, prefix="/rooms", tags=["rooms"])
 
 @app.get("/")
 async def root():

@@ -20,7 +20,9 @@ async def get_room_info(room_id: str):
             raise HTTPException(status_code=404, detail="Room not found")
         
         return room_info
-        
+    
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error getting room info: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -36,7 +38,9 @@ async def get_room_participants(room_id: str):
     try:
         participants = await livekit_service.list_participants(room_id)
         return {"participants": participants}
-        
+    
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error getting room participants: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -52,7 +56,9 @@ async def get_room_stats(room_id: str):
     try:
         stats = await livekit_service.get_room_stats(room_id)
         return stats
-        
+   
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error getting room stats: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -71,7 +77,9 @@ async def close_room(room_id: str):
             raise HTTPException(status_code=500, detail="Failed to close room")
         
         return {"message": "Room closed successfully"}
-        
+    
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error closing room: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -94,7 +102,9 @@ async def mute_participant(
             raise HTTPException(status_code=500, detail="Failed to mute participant")
         
         return {"message": "Participant muted successfully"}
-        
+    
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error muting participant: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -116,7 +126,9 @@ async def remove_participant(
             raise HTTPException(status_code=500, detail="Failed to remove participant")
         
         return {"message": "Participant removed successfully"}
-        
+    
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error removing participant: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -134,12 +146,14 @@ async def send_data_to_room(
     """Send data message to room participants"""
     
     try:
-        success = await livekit_service.send_data_to_participant(room_id, data, participant_identity)
+        success = await livekit_service.send_data_to_participants(room_id, data, participant_identity)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to send data")
         
         return {"message": "Data sent successfully"}
-        
+    
+    except HTTPException:
+        raise      
     except Exception as e:
         logger.error(f"Error sending data: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

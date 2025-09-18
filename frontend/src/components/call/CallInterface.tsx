@@ -1,10 +1,11 @@
 // frontend/src/components/call/CallInterface.tsx
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Participant, Track } from 'livekit-client';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { useCall } from '@/hooks/useCall';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Mic, MicOff, Video, VideoOff, ScreenShare, PhoneOff, Users } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, ScreenShare, PhoneOff, Users, Volume2, VolumeX } from 'lucide-react';
 
 interface CallInterfaceProps {
   token: string;
@@ -35,6 +36,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   const { currentCall } = useCall();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const [volume, setVolume] = useState(100);
 
   useEffect(() => {
     if (token && roomName) {
@@ -69,9 +71,20 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
     }
   }, [room, participants]);
 
+  // Set volume on remote video element
+  useEffect(() => {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.volume = volume / 100;
+    }
+  }, [volume]);
+
   const handleDisconnect = () => {
     disconnect();
     onDisconnect();
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
   };
 
   return (
@@ -132,7 +145,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
       </div>
 
       {/* Controls */}
-      <div className="flex justify-center space-x-4">
+      <div className="flex justify-center space-x-4 mb-4">
         <Button
           variant={isAudioEnabled ? 'default' : 'destructive'}
           size="icon"
@@ -167,8 +180,28 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
         </Button>
       </div>
 
+      {/* Volume Control */}
+      <div className="flex items-center justify-center space-x-2 mb-4">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => handleVolumeChange(volume > 0 ? 0 : 100)}
+        >
+          {volume > 0 ? <Volume2 size={16} /> : <VolumeX size={16} />}
+        </Button>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={volume}
+          onChange={(e) => handleVolumeChange(Number(e.target.value))}
+          className="w-24"
+        />
+        <span className="text-sm w-8">{volume}%</span>
+      </div>
+
       {/* Status */}
-      <div className="mt-4 text-center text-sm text-muted-foreground">
+      <div className="text-center text-sm text-muted-foreground">
         {isConnected ? 'Connected' : 'Connecting...'} | Room: {roomName}
       </div>
     </div>

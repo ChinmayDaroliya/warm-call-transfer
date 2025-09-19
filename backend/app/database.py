@@ -31,6 +31,12 @@ class CallStatus(str,Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+class PriorityLevel(str,Enum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
 class AgentStatus(str, Enum):
     AVAILABLE = "available"
     BUSY = "busy"
@@ -77,7 +83,8 @@ class Call(Base):
     agent_b_id = Column(String, ForeignKey("agents.id"), nullable=True)
 
     # call details
-    started_at = Column(DateTime, default=func.now())
+    # started_at = Column(DateTime, default=func.now())
+    started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
     duration_seconds = Column(Integer, default=0)
 
@@ -88,7 +95,7 @@ class Call(Base):
 
     # additional metadata
     call_reason = Column(String(255), nullable=True)
-    priority = Column(String(20), default="normal")
+    priority = Column(String(20), default=PriorityLevel.NORMAL.value)
     extra_metadata = Column(JSON, default=dict)   
 
     created_at = Column(DateTime, default=func.now())
@@ -188,12 +195,23 @@ def create_agent(db, name: str, email: str, skills: list = None ):
     db.refresh(agent)
     return agent
 
-def create_call(db, room_id: str, caller_name: str = None, agent_a_id: str = None):
+def create_call(
+    db,
+    room_id: str,
+    caller_name: str = None,
+    caller_phone: str = None,
+    agent_a_id: str = None,
+    call_reason: str = None,
+    priority: str = "normal"
+):
     """Create a new call"""
     call = Call(
-        room_id = room_id,
-        caller_name = caller_name,
-        agent_a_id = agent_a_id
+        room_id=room_id,
+        caller_name=caller_name,
+        caller_phone=caller_phone,
+        agent_a_id=agent_a_id,
+        call_reason=call_reason,
+        priority=priority
     )
     db.add(call)
     db.commit()

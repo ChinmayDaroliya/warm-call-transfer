@@ -70,7 +70,7 @@ async def create_new_call(
         db.commit()
 
         return CallResponse(
-             id=call.id,
+                id=call.id,
                 room_id=room_id,
                 caller_name=request.caller_name,
                 caller_phone=request.caller_phone,
@@ -129,9 +129,11 @@ async def join_existing_call(
             call_status=call.status
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error joining call: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error joining call: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Retrieve full details of a specific call by its ID.
  

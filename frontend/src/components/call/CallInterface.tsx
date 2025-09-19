@@ -37,17 +37,42 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [volume, setVolume] = useState(100);
+  const [isConnecting, setIsConnecting] = useState(false);
 
+  // Main connection effect
   useEffect(() => {
+    let isMounted = true;
+
+    const connectToRoom = async () => {
+      if (!token || !roomName || isConnecting) return;
+      
+      setIsConnecting(true);
+      try {
+        await connect(token, roomName);
+        console.log('Successfully connected to room');
+      } catch (error) {
+        console.error('Failed to connect to room:', error);
+      } finally {
+        if (isMounted) {
+          setIsConnecting(false);
+        }
+      }
+    };
+
     if (token && roomName) {
-      connect(token, roomName);
+      connectToRoom();
     }
 
+    // Cleanup function - only runs on component unmount
     return () => {
-      disconnect();
+      isMounted = false;
+      if (!isConnecting) {
+        disconnect();
+      }
     };
-  }, [token, roomName, connect, disconnect]);
+  }, [token, roomName]); // Remove connect/disconnect from dependencies
 
+  // Local video attachment
   useEffect(() => {
     if (room && localVideoRef.current) {
       room.localParticipant.videoTrackPublications.forEach((publication) => {
@@ -58,6 +83,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
     }
   }, [room, isVideoEnabled]);
 
+  // Remote video attachment
   useEffect(() => {
     if (room && remoteVideoRef.current && participants.length > 0) {
       const remoteParticipant = participants.find(p => p.identity !== room.localParticipant.identity);
@@ -132,7 +158,9 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
                 />
                 {participants.length === 0 && (
                   <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                    <div className="text-white">Waiting for participant...</div>
+                    <div className="text-white">
+                      {isConnecting ? 'Connecting...' : 'Waiting for participant...'}
+                    </div>
                   </div>
                 )}
               </div>
@@ -150,6 +178,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
           variant={isAudioEnabled ? 'default' : 'destructive'}
           size="icon"
           onClick={toggleAudio}
+          disabled={!isConnected}
         >
           {isAudioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
         </Button>
@@ -158,6 +187,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
           variant={isVideoEnabled ? 'default' : 'destructive'}
           size="icon"
           onClick={toggleVideo}
+          disabled={!isConnected}
         >
           {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
         </Button>
@@ -166,11 +196,12 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
           variant={isScreenSharing ? 'default' : 'outline'}
           size="icon"
           onClick={isScreenSharing ? stopScreenShare : shareScreen}
+          disabled={!isConnected}
         >
           <ScreenShare size={20} />
         </Button>
 
-        <Button variant="outline" size="icon">
+        <Button variant="outline" size="icon" disabled={!isConnected}>
           <Users size={20} />
           <span className="ml-2">{participants.length + 1}</span>
         </Button>
@@ -186,6 +217,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
           variant="outline"
           size="icon"
           onClick={() => handleVolumeChange(volume > 0 ? 0 : 100)}
+          disabled={!isConnected}
         >
           {volume > 0 ? <Volume2 size={16} /> : <VolumeX size={16} />}
         </Button>
@@ -196,13 +228,14 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
           value={volume}
           onChange={(e) => handleVolumeChange(Number(e.target.value))}
           className="w-24"
+          disabled={!isConnected}
         />
         <span className="text-sm w-8">{volume}%</span>
       </div>
 
       {/* Status */}
       <div className="text-center text-sm text-muted-foreground">
-        {isConnected ? 'Connected' : 'Connecting...'} | Room: {roomName}
+        {isConnecting ? 'Connecting...' : isConnected ? 'Connected' : 'Disconnected'} | Room: {roomName}
       </div>
     </div>
   );

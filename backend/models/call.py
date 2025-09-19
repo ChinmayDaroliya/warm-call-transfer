@@ -47,8 +47,16 @@ class CallResponse(BaseModel):
     agent_b_id: Optional[str] 
     access_token: Optional[str] = None
     created_at:datetime
-
-    class config:
+    updated_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    summary_generated_at: Optional[datetime] = None
+    extra_metadata: Optional[dict] = None
+    
+    class Config:
         from_attributes = True
 
 # Response sent to frontend when a participant successfully joins a call
@@ -67,5 +75,5 @@ class callListResponse(BaseModel):
     duration_seconds: int
     priority: str
 
-    class config:
+    class Config:
         from_attributes = True

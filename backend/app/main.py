@@ -36,12 +36,25 @@ app = FastAPI(
 )
 
 # Configure CORS
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=settings.ALLOWED_ORIGINS,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+# CORS settings
+origins = [
+    "http://localhost:3000",  # your frontend origin
+    "http://127.0.0.1:3000",  # optional
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=origins,           # allow frontend to access backend
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
+    allow_methods=["*"],             # allow all HTTP methods
+    allow_headers=["*"],             # allow all headers
 )
 
 # Include routers
@@ -69,7 +82,7 @@ async def global_exception_handler(request, exc):
 # Start FastAPI server with Uvicorn; auto-reloads on code changes
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "app.main:app", 
         host = settings.HOST,
         port = settings.PORT,
         reload = settings.DEBUG,

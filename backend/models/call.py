@@ -42,6 +42,7 @@ class CallResponse(BaseModel):
     room_id: str
     caller_name: Optional[str]
     caller_phone: Optional[str]
+    call_reason: Optional[str] = None
     status: CallStatus
     agent_a_id: Optional[str] 
     agent_b_id: Optional[str] 
@@ -70,10 +71,13 @@ class callListResponse(BaseModel):
     id: str
     room_id: str
     caller_name: Optional[str]
+    caller_phone: Optional[str]
+    call_reason: Optional[str]
     status: CallStatus
     started_at: Optional[datetime]
     duration_seconds: int
     priority: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

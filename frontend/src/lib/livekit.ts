@@ -14,6 +14,8 @@ export interface LiveKitConfig {
   wsUrl: string;
   token: string;
   options?: RoomOptions;
+  // In v2, connection-specific options (e.g., autoSubscribe) belong here
+  connectOptions?: import('livekit-client').RoomConnectOptions;
 }
 
 export class LiveKitService {
@@ -22,7 +24,7 @@ export class LiveKitService {
   async connect(config: LiveKitConfig): Promise<Room> {
     this.room = new Room(config.options);
     try {
-      await this.room.connect(config.wsUrl, config.token);
+      await this.room.connect(config.wsUrl, config.token, config.connectOptions);
       return this.room;
     } catch (error) {
       console.error('Failed to connect to LiveKit room:', error);
@@ -46,7 +48,11 @@ export class LiveKitService {
     const micPub = local.getTrackPublications().find(
       (pub) => pub.source === 'microphone'
     );
-    if (!micPub) return;
+    // If not published yet, enable (this will prompt for permission)
+    if (!micPub) {
+      await local.setMicrophoneEnabled(true);
+      return;
+    }
 
     await local.setMicrophoneEnabled(!micPub.isMuted);
   }
@@ -58,7 +64,11 @@ export class LiveKitService {
     const camPub = local.getTrackPublications().find(
       (pub) => pub.source === 'camera'
     );
-    if (!camPub) return;
+    // If not published yet, enable (this will prompt for permission)
+    if (!camPub) {
+      await local.setCameraEnabled(true);
+      return;
+    }
 
     await local.setCameraEnabled(!camPub.isMuted);
   }
@@ -91,12 +101,17 @@ export class LiveKitService {
 
     this.room.on(RoomEvent.ParticipantConnected, update);
     this.room.on(RoomEvent.ParticipantDisconnected, update);
+    // Also respond to track events so UI updates when media becomes available
+    this.room.on(RoomEvent.TrackSubscribed, update as any);
+    this.room.on(RoomEvent.TrackUnsubscribed, update as any);
 
     update(); // initial call
 
     return () => {
       this.room?.off(RoomEvent.ParticipantConnected, update);
       this.room?.off(RoomEvent.ParticipantDisconnected, update);
+      this.room?.off(RoomEvent.TrackSubscribed, update as any);
+      this.room?.off(RoomEvent.TrackUnsubscribed, update as any);
     };
   }
 

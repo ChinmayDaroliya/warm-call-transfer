@@ -38,17 +38,20 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [volume, setVolume] = useState(100);
   const [isConnecting, setIsConnecting] = useState(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   // Main connection effect
   useEffect(() => {
     let isMounted = true;
 
     const connectToRoom = async () => {
-      if (!token || !roomName || isConnecting) return;
+      if (!token || !roomName) return;
+      if (isConnecting || isConnected) return;
       
       setIsConnecting(true);
       try {
-        await connect(token, roomName);
+        const cleanup = await connect(token, roomName);
+        cleanupRef.current = typeof cleanup === 'function' ? cleanup : null;
         console.log('Successfully connected to room');
       } catch (error) {
         console.error('Failed to connect to room:', error);
@@ -66,11 +69,13 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
     // Cleanup function - only runs on component unmount
     return () => {
       isMounted = false;
-      if (!isConnecting) {
-        disconnect();
+      try {
+        cleanupRef.current?.();
+      } finally {
+        cleanupRef.current = null;
       }
     };
-  }, [token, roomName]); // Remove connect/disconnect from dependencies
+  }, [token, roomName, isConnected, isConnecting]); // do not include connect/disconnect functions
 
   // Local video attachment
   useEffect(() => {
@@ -114,7 +119,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-100 p-4">
+    <div className="flex flex-col h-screen bg-gray-100 p-4">
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* Local Video */}
         <Card>
@@ -138,7 +143,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
                 )}
               </div>
               <div className="mt-2 text-sm text-muted-foreground">
-                {currentCall?.caller_name || 'You'}
+                {room?.localParticipant?.name || room?.localParticipant?.identity || 'You'}
               </div>
             </div>
           </CardContent>
@@ -165,7 +170,10 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
                 )}
               </div>
               <div className="mt-2 text-sm text-muted-foreground">
-                {participants.find(p => p.identity !== room?.localParticipant.identity)?.name || 'Unknown'}
+                {(() => {
+                  const rp = participants.find(p => p.identity !== room?.localParticipant.identity);
+                  return rp?.name || rp?.identity || 'Participant';
+                })()}
               </div>
             </div>
           </CardContent>
@@ -173,7 +181,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
       </div>
 
       {/* Controls */}
-      <div className="flex justify-center space-x-4 mb-4">
+      <div className="flex justify-center space-x-4 mb-2 mt-2">
         <Button
           variant={isAudioEnabled ? 'default' : 'destructive'}
           size="icon"
@@ -203,7 +211,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
 
         <Button variant="outline" size="icon" disabled={!isConnected}>
           <Users size={20} />
-          <span className="ml-2">{participants.length + 1}</span>
+          <span className="ml-2">{participants.length}</span>
         </Button>
 
         <Button variant="destructive" size="icon" onClick={handleDisconnect}>
@@ -212,7 +220,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
       </div>
 
       {/* Volume Control */}
-      <div className="flex items-center justify-center space-x-2 mb-4">
+      <div className="flex items-center justify-center space-x-2 mb-2">
         <Button
           variant="outline"
           size="icon"
@@ -234,7 +242,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
       </div>
 
       {/* Status */}
-      <div className="text-center text-sm text-muted-foreground">
+      <div className="text-center text-sm text-muted-foreground fixed bottom-0 left-0 w-full bg-gray-100 p-2">
         {isConnecting ? 'Connecting...' : isConnected ? 'Connected' : 'Disconnected'} | Room: {roomName}
       </div>
     </div>

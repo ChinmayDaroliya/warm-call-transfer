@@ -11,7 +11,9 @@ import { CallInterface } from '@/components/call/CallInterface';
 import { TransferButton } from '@/components/call/TransferButton';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Phone, User, Clock } from 'lucide-react';
-import { CallStatus } from '@/lib/types';
+import { Call, CallStatus } from '@/lib/types';
+import { callsApi, agentsApi } from '@/lib/api';
+import { useAgentStore, useCallStore } from '@/store';
 
 export default function AgentAPage() {
   const [isJoining, setIsJoining] = useState(false);
@@ -19,31 +21,78 @@ export default function AgentAPage() {
   const { joinCall, currentCall, updateStatus } = useCall();
   const { isConnected } = useLiveKit();
   const router = useRouter();
+  const { currentAgent } = useAgentStore();
+  const { setCurrentCall } = useCallStore();
+  const { setCurrentAgent } = useAgentStore.getState();
 
-  // Mock call data for demo - in real app, you'd get this from the backend
-  const mockCall = {
-    id: 'call_123',
-    room_id: 'room_abc',
-    caller_name: 'John Doe',
-    caller_phone: '+1234567890',
-    status: 'active',
-    agent_a_id: 'agent_1',
-    created_at: new Date().toISOString(),
-  };
+  const [incomingCall, setIncomingCall] = useState<Call | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Ensure we have a current agent set; if none, pick first available or create one
+  useEffect(() => {
+    let mounted = true;
+    const ensureAgent = async () => {
+      try {
+        if (currentAgent) return;
+        const res = await agentsApi.list({ status: 'available' });
+        const agents = res.data || [];
+        if (agents.length > 0) {
+          if (mounted) useAgentStore.getState().setCurrentAgent(agents[0]);
+          return;
+        }
+        // create a default agent if none exist
+        const created = await agentsApi.create({ name: 'Agent A', email: `agent.a+${Date.now()}@example.com`, skills: [] });
+        if (mounted) useAgentStore.getState().setCurrentAgent(created.data);
+      } catch (e) {
+        console.error('Failed to ensure agent', e);
+      }
+    };
+    ensureAgent();
+    return () => { mounted = false; };
+  }, [currentAgent]);
+
+  // Load active call assigned to Agent A (only show when call has started)
+  useEffect(() => {
+    let mounted = true;
+    const loadCalls = async () => {
+      try {
+        setIsLoading(true);
+        const res = await callsApi.list({ status: 'active' });
+        const calls: Call[] = res.data || [];
+        // Only surface calls assigned to this agent. If none are assigned, treat as no incoming call.
+        const assigned = currentAgent ? calls.find(c => c.agent_a_id === currentAgent.id) : null;
+        if (mounted) setIncomingCall(assigned || null);
+      } catch (e) {
+        console.error('Failed to load waiting calls', e);
+        if (mounted) setIncomingCall(null);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+    loadCalls();
+    const id = setInterval(loadCalls, 4000); // simple poll
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, [currentAgent]);
 
   const handleJoinCall = async () => {
     setIsJoining(true);
     setJoinError(null);
     
     try {
+      if (!incomingCall) throw new Error('No incoming call to join');
       const response = await joinCall({
-        room_id: mockCall.room_id,
-        participant_identity: `agent_${mockCall.agent_a_id}`,
-        participant_name: 'Agent A',
+        room_id: incomingCall.room_id,
+        participant_identity: `agent_${currentAgent?.id || 'unknown'}`,
+        participant_name: currentAgent?.name || 'Agent',
       });
       
+      // Merge token into currentCall and set in store so CallInterface can use it
+      setCurrentCall({ ...incomingCall, access_token: response.access_token } as Call);
       // Update call status to active
-      await updateStatus(mockCall.id, CallStatus.ACTIVE);
+      await updateStatus(incomingCall.id, CallStatus.ACTIVE);
       
     } catch (error: any) {
       setJoinError(error.response?.data?.detail || 'Failed to join call');
@@ -59,7 +108,7 @@ export default function AgentAPage() {
     router.push('/agent');
   };
 
-  if (isConnected && currentCall) {
+  if (currentCall && currentCall.access_token) {
     return (
       <div className="h-screen flex flex-col">
         <div className="flex items-center justify-between p-4 bg-border">
@@ -67,7 +116,7 @@ export default function AgentAPage() {
           <div className="flex items-center space-x-4">
             <TransferButton
               callId={currentCall.id}
-              fromAgentId={mockCall.agent_a_id!}
+              fromAgentId={currentAgent?.id || ''}
             />
             <Button variant="destructive" onClick={handleCallEnd}>
               End Call
@@ -99,60 +148,70 @@ export default function AgentAPage() {
             </div>
           )}
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-                  <User size={24} className="text-primary-foreground" />
+          {isLoading ? (
+            <div className="p-6 text-muted-foreground">Loading...</div>
+          ) : incomingCall ? (
+            <>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                      <User size={24} className="text-primary-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{incomingCall.caller_name || 'Unknown Caller'}</h3>
+                      {incomingCall.caller_phone && (
+                        <p className="text-sm text-muted-foreground">{incomingCall.caller_phone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-muted-foreground">Active</div>
+                    <div className="text-xs text-muted-foreground flex items-center">
+                      <Clock size={12} className="mr-1" />
+                      {incomingCall.created_at ? new Date(incomingCall.created_at).toLocaleTimeString() : ''}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold">{mockCall.caller_name}</h3>
-                  <p className="text-sm text-muted-foreground">{mockCall.caller_phone}</p>
-                </div>
+
+                {incomingCall.call_reason && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-semibold text-blue-800 mb-2">Call Reason</h4>
+                    <p className="text-blue-700">{incomingCall.call_reason}</p>
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Waiting</div>
-                <div className="text-xs text-muted-foreground flex items-center">
-                  <Clock size={12} className="mr-1" />
-                  0:45
-                </div>
+
+              <div className="flex space-x-4">
+                <Button
+                  onClick={handleJoinCall}
+                  disabled={isJoining}
+                  className="flex-1"
+                >
+                  {isJoining ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Joining...
+                    </>
+                  ) : (
+                    <>
+                      <Phone size={16} className="mr-2" />
+                      Accept Call
+                    </>
+                  )}
+                </Button>
+                {/* Optional: Add decline action if supported by backend */}
               </div>
+            </>
+          ) : (
+            <div className="p-10 text-center text-muted-foreground">
+              <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Phone size={18} />
+              </div>
+              <div className="font-medium">No incoming calls</div>
+              <div className="text-sm">You will see calls here when they are assigned to you.</div>
             </div>
-
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="font-semibold text-blue-800 mb-2">Call Reason</h4>
-              <p className="text-blue-700">Technical support for product setup and configuration</p>
-            </div>
-          </div>
-
-          <div className="flex space-x-4">
-            <Button
-              onClick={handleJoinCall}
-              disabled={isJoining}
-              className="flex-1"
-            >
-              {isJoining ? (
-                <>
-                  <LoadingSpinner size="sm" className="mr-2" />
-                  Joining...
-                </>
-              ) : (
-                <>
-                  <Phone size={16} className="mr-2" />
-                  Accept Call
-                </>
-              )}
-            </Button>
-            <Button variant="outline" className="flex-1">
-              Decline
-            </Button>
-          </div>
-
-          <div className="text-sm text-muted-foreground">
-            <p>• This call has been waiting for 45 seconds</p>
-            <p>• Customer needs technical assistance</p>
-            <p>• Estimated handle time: 5-7 minutes</p>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

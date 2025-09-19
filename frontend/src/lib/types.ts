@@ -4,6 +4,7 @@ export interface Call {
   room_id: string;
   caller_name?: string;
   caller_phone?: string;
+  call_reason?: string;
   status: CallStatus;
   agent_a_id?: string;
   agent_b_id?: string;

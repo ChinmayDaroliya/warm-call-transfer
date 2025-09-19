@@ -11,6 +11,7 @@ from app.database import (
     get_db, Agent, AgentStatus, create_call, Call, CallStatus
 )
 from services.livekit_service import livekit_service
+from app.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -28,16 +29,23 @@ async def create_new_call(
         # generate unique room id 
         room_id = livekit_service.generate_room_id("call")
 
-        # create livekit room
-        room_info = await livekit_service.create_room(
-            room_name = room_id,
-            max_participants = 5,
-            metadata = {
-                "type": "customer_call",
-                "caller_name": request.caller_name,
-                "priority": request.priority
-            }
-        )
+        # create livekit room (with DEBUG fallback)
+        try:
+            room_info = await livekit_service.create_room(
+                room_name = room_id,
+                max_participants = 5,
+                metadata = {
+                    "type": "customer_call",
+                    "caller_name": request.caller_name,
+                    "priority": request.priority
+                }
+            )
+        except Exception as e:
+            if settings.DEBUG:
+                logger.warning(f"LiveKit room creation failed in DEBUG mode: {e}. Proceeding with mock room.")
+                room_info = {"room_id": room_id}
+            else:
+                raise
 
         # find available agent if requested
         agent_id = None
@@ -74,9 +82,10 @@ async def create_new_call(
                 room_id=room_id,
                 caller_name=request.caller_name,
                 caller_phone=request.caller_phone,
+                call_reason=request.call_reason,
                 status=call.status,
                 agent_a_id=agent_id,
-                agent_b_id=getattr(call, "agent_b_id", None),  # ✅ add this
+                agent_b_id=getattr(call, "agent_b_id", None),  # 
                 access_token=caller_token,
                 created_at=call.created_at,
                 updated_at=getattr(call, "updated_at", None),
@@ -114,13 +123,16 @@ async def join_existing_call(
             participant_name=request.participant_name
         )
         
-        # If joining as agent, update agent status
+        # If joining as agent, update agent status and assign if unassigned
         if request.participant_identity.startswith("agent_"):
             agent_id = request.participant_identity.split("_")[1]
             agent = db.query(Agent).filter(Agent.id == agent_id).first()
             if agent:
                 agent.current_room_id = request.room_id
                 agent.status = AgentStatus.BUSY.value
+                # Assign agent to call if not already assigned
+                if not call.agent_a_id:
+                    call.agent_a_id = agent.id
                 db.commit()
         
         return JoinCallResponse(

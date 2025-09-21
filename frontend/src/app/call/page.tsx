@@ -17,6 +17,7 @@ export default function CallPage() {
   const [callerPhone, setCallerPhone] = useState('');
   const [callReason, setCallReason] = useState('');
   const [isCallActive, setIsCallActive] = useState(false);
+  const [noAgentsAvailable, setNoAgentsAvailable] = useState(false);
   const { createCall, currentCall, isLoading, error } = useCall();
   const router = useRouter();
 
@@ -33,6 +34,10 @@ export default function CallPage() {
       if (call && call.access_token) {
         setIsCallActive(true);
       }
+
+      // If no agent was assigned, inform the caller that agents are busy.
+      setNoAgentsAvailable(!call?.agent_a_id);
+
     } catch (error) {
       console.error('Failed to start call:', error);
     }
@@ -67,6 +72,12 @@ export default function CallPage() {
             {error && (
               <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
                 {error}
+              </div>
+            )}
+
+            {noAgentsAvailable && (
+              <div className="bg-amber-50 text-amber-800 border border-amber-200 p-3 rounded-md text-sm">
+                All agents are currently busy. You are in the queue, please wait for the next available agent.
               </div>
             )}
 

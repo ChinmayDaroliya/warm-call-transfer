@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import logging
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from models.call import (
     CallCreateRequest, CallResponse,JoinCallResponse,JoinCallRequest, CallUpdateRequest, callListResponse
@@ -170,13 +170,39 @@ async def list_calls(
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
-    """List all calls with optional filtering"""
-    
+    """List all calls with optional filtering. For WAITING, only include recent calls
+    that currently have a caller connected to the LiveKit room to avoid stale entries."""
+
     query = db.query(Call)
     if status:
         query = query.filter(Call.status == status.value)
-    
+
     calls = query.order_by(Call.created_at.desc()).limit(limit).all()
+
+    # For waiting calls, filter to recent and (in production) with a live caller connected
+    if status == CallStatus.WAITING:
+        now = datetime.utcnow()
+        ten_min_ago = now - timedelta(minutes=10)
+        # Always apply recency filter
+        recent_calls = [c for c in calls if c.created_at and c.created_at >= ten_min_ago]
+
+        if settings.DEBUG:
+            # In DEBUG/local, LiveKit may not reflect participants correctly; include recent waiting calls
+            return [callListResponse.from_orm(call) for call in recent_calls]
+
+        filtered = []
+        for c in recent_calls:
+            try:
+                parts = await livekit_service.list_participants(c.room_id)
+                has_caller = any((p.identity or "").startswith("caller_") for p in parts)
+                if has_caller:
+                    filtered.append(c)
+            except Exception as e:
+                logger.warning(f"list_calls waiting filter: failed to check participants for room {c.room_id}: {e}")
+                # In production, if participants check fails, include to avoid hiding valid calls
+                filtered.append(c)
+        return [callListResponse.from_orm(call) for call in filtered]
+
     return [callListResponse.from_orm(call) for call in calls]
 
 # Update the status of a call, record transcript, and free agents if completed.

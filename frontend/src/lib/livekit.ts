@@ -116,10 +116,10 @@ export class LiveKitService {
     if (!this.room) return () => {};
 
     const update = () => {
-      const participants = [
-        this.room!.localParticipant,
-        ...Array.from(this.room!.remoteParticipants.values()),
-      ];
+      if (!this.room) return; // room might be torn down during async updates
+      const local = this.room.localParticipant;
+      const remotes = Array.from(this.room.remoteParticipants.values());
+      const participants = local ? [local, ...remotes] : [...remotes];
       callback(participants);
     };
 
@@ -161,9 +161,11 @@ export class LiveKitService {
     );
 
     // local participant
-    this.room.localParticipant.getTrackPublications().forEach((pub) =>
-      attach(this.room!.localParticipant, pub)
-    );
+    if (this.room.localParticipant) {
+      this.room.localParticipant.getTrackPublications().forEach((pub) =>
+        attach(this.room!.localParticipant, pub)
+      );
+    }
 
     // future participants
     const handle = (p: Participant) => {

@@ -7,6 +7,10 @@ export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    // Prevent caching so agents always see the freshest state
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Expires': '0',
   },
 });
 
@@ -35,16 +39,16 @@ api.interceptors.response.use(
 export const callsApi = {
   create: (data: any) => api.post('/routers/calls/create', data),
   join: (data: any) => api.post('/routers/calls/join', data),
-  get: (callId: string) => api.get(`/routers/calls/${callId}`),
-  list: (params?: any) => api.get('/routers/calls', { params }),
+  get: (callId: string, config?: any) => api.get(`/routers/calls/${callId}`, { ...(config || {}) }),
+  list: (params?: any, config?: any) => api.get('/routers/calls', { params, ...(config || {}) }),
   updateStatus: (callId: string, data: any) => api.put(`/routers/calls/${callId}/status`, data),
   end: (callId: string) => api.delete(`/routers/calls/${callId}`),
 };
 
 export const agentsApi = {
   create: (data: any) => api.post('/routers/agents', data),
-  list: (params?: any) => api.get('/routers/agents', { params }),
-  get: (agentId: string) => api.get(`/routers/agents/${agentId}`),
+  list: (params?: any, config?: any) => api.get('/routers/agents', { params, ...(config || {}) }),
+  get: (agentId: string, config?: any) => api.get(`/routers/agents/${agentId}`, { ...(config || {}) }),
   update: (agentId: string, data: any) => api.put(`/routers/agents/${agentId}`, data),
   updateStatus: (agentId: string, data: any) => api.patch(`/routers/agents/${agentId}/status`, data),
   delete: (agentId: string) => api.delete(`/routers/agents/${agentId}`),
@@ -61,10 +65,10 @@ export const transferApi = {
 };
 
 export const roomsApi = {
-  getInfo: (roomId: string) => api.get(`/rooms/${roomId}/info`),
-  getParticipants: (roomId: string) => api.get(`/rooms/${roomId}/participants`),
-  getStats: (roomId: string) => api.get(`/rooms/${roomId}/stats`),
-  close: (roomId: string) => api.delete(`/rooms/${roomId}`),
+  getInfo: (roomId: string, config?: any) => api.get(`/rooms/${roomId}/info`, { ...(config || {}) }),
+  getParticipants: (roomId: string, config?: any) => api.get(`/rooms/${roomId}/participants`, { ...(config || {}) }),
+  getStats: (roomId: string, config?: any) => api.get(`/rooms/${roomId}/stats`, { ...(config || {}) }),
+  close: (roomId: string, config?: any) => api.delete(`/rooms/${roomId}`, { ...(config || {}) }),
   muteParticipant: (roomId: string, participantIdentity: string, trackType?: string) =>
     api.post(`/rooms/${roomId}/mute`, { participantIdentity, trackType }),
   removeParticipant: (roomId: string, participantIdentity: string) =>

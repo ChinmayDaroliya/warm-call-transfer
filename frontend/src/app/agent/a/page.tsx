@@ -1,7 +1,7 @@
 // frontend/src/app/agent/a/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,8 @@ import { CallInterface } from '@/components/call/CallInterface';
 import { TransferButton } from '@/components/call/TransferButton';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Phone, User, Clock } from 'lucide-react';
-import { Call, CallStatus } from '@/lib/types';
-import { callsApi, agentsApi } from '@/lib/api';
+import { Call, CallStatus, Agent } from '@/lib/types';
+import { callsApi, agentsApi, roomsApi } from '@/lib/api';
 import { useAgentStore, useCallStore } from '@/store';
 
 export default function AgentAPage() {
@@ -21,82 +21,174 @@ export default function AgentAPage() {
   const { joinCall, currentCall, updateStatus } = useCall();
   const { isConnected } = useLiveKit();
   const router = useRouter();
-  const { currentAgent } = useAgentStore();
+  // Use a local agent for this page to avoid being overwritten by other pages
+  const [pageAgent, setPageAgent] = useState<Agent | null>(null);
   const { setCurrentCall } = useCallStore();
-  const { setCurrentAgent } = useAgentStore.getState();
 
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Ensure we have a current agent set; if none, pick first available or create one
+  // Ensure we have a local page agent set; prefer the named 'Agent A' (find or create)
   useEffect(() => {
     let mounted = true;
+    setIncomingCall(null); // reset on mount to avoid showing stale caller
     const ensureAgent = async () => {
       try {
-        if (currentAgent) return;
-        const res = await agentsApi.list({ status: 'available' });
-        const agents = res.data || [];
-        if (agents.length > 0) {
-          if (mounted) useAgentStore.getState().setCurrentAgent(agents[0]);
+        // If already Agent A, keep
+        if (pageAgent && pageAgent.name?.toLowerCase().includes('agent a')) return;
+
+        // Look for existing Agent A by name among all agents
+        const allRes = await agentsApi.list();
+        const all = allRes.data || [];
+        const agentA = all.find((a: any) => (a.name || '').toLowerCase() === 'agent a');
+        if (agentA) {
+          if (mounted) setPageAgent(agentA as Agent);
+          // Normalize: make Agent A available and others offline to guide auto-assignment
+          try {
+            await agentsApi.updateStatus(agentA.id, { status: 'available' });
+            await Promise.all(
+              all
+                .filter((a: any) => a.id !== agentA.id && (a.name || '').toLowerCase() !== 'agent b')
+                .map((a: any) => agentsApi.updateStatus(a.id, { status: 'offline' }))
+            );
+          } catch (e) { console.warn('Failed to normalize agents (A):', e); }
           return;
         }
-        // create a default agent if none exist
+
+        // Create Agent A if not found
         const created = await agentsApi.create({ name: 'Agent A', email: `agent.a+${Date.now()}@example.com`, skills: [] });
-        if (mounted) useAgentStore.getState().setCurrentAgent(created.data);
+        if (mounted) setPageAgent(created.data as Agent);
+        // Ensure new Agent A is available
+        try { await agentsApi.updateStatus(created.data.id, { status: 'available' }); } catch {}
       } catch (e) {
         console.error('Failed to ensure agent', e);
       }
     };
     ensureAgent();
     return () => { mounted = false; };
-  }, [currentAgent]);
+  }, [pageAgent]);
 
-  // Load calls assigned to Agent A. Prefer active, then waiting. If none assigned, surface newest unassigned waiting call.
+  // Load calls regardless of local agent resolution; prefer assigned, else show newest waiting
   useEffect(() => {
     let mounted = true;
     const loadCalls = async () => {
       try {
-        setIsLoading(true);
+        // Manage abort for overlapping requests
+        if (abortRef.current) {
+          abortRef.current.abort();
+        }
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        // first load vs refresh indicator
+        if (isLoading) {
+          setIsLoading(true);
+        } else {
+          setIsRefreshing(true);
+        }
         // Fetch both active and waiting calls
         const [activeRes, waitingRes] = await Promise.all([
-          callsApi.list({ status: 'active' }),
-          callsApi.list({ status: 'waiting' }),
+          callsApi.list({ status: 'active', _t: Date.now() }, { signal: controller.signal }),
+          callsApi.list({ status: 'waiting', _t: Date.now() }, { signal: controller.signal }),
         ]);
         const activeCalls: Call[] = activeRes.data || [];
-        const waitingCalls: Call[] = waitingRes.data || [];
+        let waitingCalls: Call[] = waitingRes.data || [];
 
+        // Use the latest local page agent to avoid cross-tab overwrites
+        const latestAgent = pageAgent;
         // Debug logs to inspect data coming from API and store
-        console.debug('[Agent A] currentAgent:', currentAgent);
+        console.debug('[Agent A] currentAgent:', latestAgent);
         console.debug('[Agent A] active calls:', activeCalls);
         console.debug('[Agent A] waiting calls:', waitingCalls);
 
         // Prefer calls assigned to this agent
-        const assignedActive = currentAgent ? activeCalls.find(c => c.agent_a_id === currentAgent.id) : null;
-        const assignedWaiting = currentAgent ? waitingCalls.find(c => c.agent_a_id === currentAgent.id) : null;
+        const assignedActive = latestAgent ? activeCalls.find(c => c.agent_a_id === latestAgent.id) : null;
+        const assignedWaiting = latestAgent ? waitingCalls.find(c => c.agent_a_id === latestAgent.id) : null;
 
-        // Only consider calls that are explicitly assigned to this agent.
-        // Do NOT fall back to unassigned calls to avoid showing caller info when there's no real incoming call for this agent.
+        // Freshness filter: only consider waiting calls within last 10 minutes
+        const now = Date.now();
+        const TEN_MIN = 10 * 60 * 1000;
+        waitingCalls = waitingCalls
+          .filter(c => {
+            const ts = c.created_at ? new Date(c.created_at).getTime() : 0;
+            return ts > 0 && now - ts <= TEN_MIN;
+          })
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        // Build candidate list: assigned first, then newest unassigned waiting
+        const candidates: Call[] = [];
+        if (assignedActive) candidates.push(assignedActive);
+        if (assignedWaiting) candidates.push(assignedWaiting);
+        const unassignedWaiting = waitingCalls.filter(c => !c.agent_a_id);
+        candidates.push(...unassignedWaiting);
+
+        // Verify LiveKit room actually has a caller connected (identity starts with 'caller_')
         let next: Call | null = null;
-        if (assignedActive) next = assignedActive;
-        else if (assignedWaiting) next = assignedWaiting;
+        let verifiedAny = false;
+        for (const c of candidates.slice(0, 5)) {
+          try {
+            const resp = await roomsApi.getParticipants(c.room_id, { signal: controller.signal });
+            const parts: any[] = resp.data?.participants || resp.data || [];
+            verifiedAny = true;
+            const hasCaller = Array.isArray(parts) && parts.some((p: any) => (p.identity || '').startsWith('caller_'));
+            if (hasCaller) {
+              next = c;
+              break;
+            }
+          } catch (e) {
+            console.warn('[Agent A] participants check failed for room', c.room_id, e);
+          }
+        }
+        // Fallback: if verification failed or none matched, show the first candidate to avoid hiding valid calls
+        if (!next && candidates.length > 0) {
+          next = candidates[0];
+        }
 
-        console.debug('[Agent A] selected incoming call (assigned to current agent only):', next);
+        console.debug('[Agent A] selected incoming call (assigned-first, otherwise unassigned waiting):', next);
 
         if (mounted) setIncomingCall(next);
-      } catch (e) {
+      } catch (e: any) {
+        if (e?.name === 'CanceledError') return; // axios cancellation
         console.error('Failed to load waiting calls', e);
         if (mounted) setIncomingCall(null);
       } finally {
-        if (mounted) setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     };
     loadCalls();
-    const id = setInterval(loadCalls, 4000); // simple poll
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadCalls();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    // Faster poll when tab is visible, slower when hidden
+    let intervalId = setInterval(loadCalls, 2000);
+    const onFocus = () => {
+      clearInterval(intervalId);
+      intervalId = setInterval(loadCalls, 1500);
+      loadCalls();
+    };
+    const onBlur = () => {
+      clearInterval(intervalId);
+      intervalId = setInterval(loadCalls, 5000);
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
     return () => {
       mounted = false;
-      clearInterval(id);
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('blur', onBlur);
+      if (abortRef.current) abortRef.current.abort();
     };
-  }, [currentAgent]);
+  }, [pageAgent]);
 
   const handleJoinCall = async () => {
     setIsJoining(true);
@@ -106,8 +198,8 @@ export default function AgentAPage() {
       if (!incomingCall) throw new Error('No incoming call to join');
       const response = await joinCall({
         room_id: incomingCall.room_id,
-        participant_identity: `agent_${currentAgent?.id || 'unknown'}`,
-        participant_name: currentAgent?.name || 'Agent',
+        participant_identity: `agent_${pageAgent?.id || 'unknown'}`,
+        participant_name: pageAgent?.name || 'Agent',
       });
       
       // Merge token into currentCall and set in store so CallInterface can use it
@@ -137,7 +229,7 @@ export default function AgentAPage() {
           <div className="flex items-center space-x-4">
             <TransferButton
               callId={currentCall.id}
-              fromAgentId={currentAgent?.id || ''}
+              fromAgentId={pageAgent?.id || ''}
             />
             <Button variant="destructive" onClick={handleCallEnd}>
               End Call
@@ -160,6 +252,9 @@ export default function AgentAPage() {
           <CardTitle className="flex items-center">
             <User className="mr-2" size={24} />
             Agent A - Incoming Call
+            {isRefreshing && (
+              <span className="ml-3 text-xs text-muted-foreground">Refreshing…</span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">

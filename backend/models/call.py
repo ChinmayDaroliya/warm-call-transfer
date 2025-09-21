@@ -78,6 +78,9 @@ class callListResponse(BaseModel):
     duration_seconds: int
     priority: str
     created_at: datetime
+    # Include agent assignment so frontend can filter per-agent
+    agent_a_id: Optional[str] = None
+    agent_b_id: Optional[str] = None
 
     class Config:
         from_attributes = True

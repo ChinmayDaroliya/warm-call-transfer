@@ -20,21 +20,45 @@ export interface LiveKitConfig {
 
 export class LiveKitService {
   private room: Room | null = null;
+  private connectingPromise: Promise<Room> | null = null;
 
   async connect(config: LiveKitConfig): Promise<Room> {
-    this.room = new Room(config.options);
-    try {
-      await this.room.connect(config.wsUrl, config.token, config.connectOptions);
+    // If we already have a room instance, reuse it
+    if (this.room) {
       return this.room;
-    } catch (error) {
-      console.error('Failed to connect to LiveKit room:', error);
-      throw error;
     }
+
+    // If a connection is in-flight, await it
+    if (this.connectingPromise) {
+      return this.connectingPromise;
+    }
+
+    // Start a new connection
+    this.room = new Room(config.options);
+    this.connectingPromise = (async () => {
+      try {
+        await this.room!.connect(config.wsUrl, config.token, config.connectOptions);
+        return this.room!;
+      } catch (error) {
+        // Reset state on failure
+        this.room = null;
+        console.error('Failed to connect to LiveKit room:', error);
+        throw error;
+      } finally {
+        this.connectingPromise = null;
+      }
+    })();
+
+    return this.connectingPromise;
   }
 
   disconnect() {
-    this.room?.disconnect();
-    this.room = null;
+    try {
+      this.room?.disconnect();
+    } finally {
+      this.room = null;
+      this.connectingPromise = null;
+    }
   }
 
   getRoom(): Room | null {

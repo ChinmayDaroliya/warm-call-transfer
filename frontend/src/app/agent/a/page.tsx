@@ -51,17 +51,38 @@ export default function AgentAPage() {
     return () => { mounted = false; };
   }, [currentAgent]);
 
-  // Load active call assigned to Agent A (only show when call has started)
+  // Load calls assigned to Agent A. Prefer active, then waiting. If none assigned, surface newest unassigned waiting call.
   useEffect(() => {
     let mounted = true;
     const loadCalls = async () => {
       try {
         setIsLoading(true);
-        const res = await callsApi.list({ status: 'active' });
-        const calls: Call[] = res.data || [];
-        // Only surface calls assigned to this agent. If none are assigned, treat as no incoming call.
-        const assigned = currentAgent ? calls.find(c => c.agent_a_id === currentAgent.id) : null;
-        if (mounted) setIncomingCall(assigned || null);
+        // Fetch both active and waiting calls
+        const [activeRes, waitingRes] = await Promise.all([
+          callsApi.list({ status: 'active' }),
+          callsApi.list({ status: 'waiting' }),
+        ]);
+        const activeCalls: Call[] = activeRes.data || [];
+        const waitingCalls: Call[] = waitingRes.data || [];
+
+        // Debug logs to inspect data coming from API and store
+        console.debug('[Agent A] currentAgent:', currentAgent);
+        console.debug('[Agent A] active calls:', activeCalls);
+        console.debug('[Agent A] waiting calls:', waitingCalls);
+
+        // Prefer calls assigned to this agent
+        const assignedActive = currentAgent ? activeCalls.find(c => c.agent_a_id === currentAgent.id) : null;
+        const assignedWaiting = currentAgent ? waitingCalls.find(c => c.agent_a_id === currentAgent.id) : null;
+
+        // Only consider calls that are explicitly assigned to this agent.
+        // Do NOT fall back to unassigned calls to avoid showing caller info when there's no real incoming call for this agent.
+        let next: Call | null = null;
+        if (assignedActive) next = assignedActive;
+        else if (assignedWaiting) next = assignedWaiting;
+
+        console.debug('[Agent A] selected incoming call (assigned to current agent only):', next);
+
+        if (mounted) setIncomingCall(next);
       } catch (e) {
         console.error('Failed to load waiting calls', e);
         if (mounted) setIncomingCall(null);
@@ -166,7 +187,7 @@ export default function AgentAPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Active</div>
+                    <div className="text-sm text-muted-foreground">{incomingCall.status === 'active' ? 'Active' : 'Waiting'}</div>
                     <div className="text-xs text-muted-foreground flex items-center">
                       <Clock size={12} className="mr-1" />
                       {incomingCall.created_at ? new Date(incomingCall.created_at).toLocaleTimeString() : ''}
